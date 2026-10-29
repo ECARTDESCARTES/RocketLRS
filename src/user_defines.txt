@@ -103,3 +103,8 @@
 # Transparent RocketLRS link over ELRS (replaces Airport).
 # The baud rate is the RLRS UART rate used by the Java app / STM32.
 -DUSE_ROCKETLRS_AT_BAUD=9600
+# RocketLRS link defaults (TX, applied on config reset / first boot):
+# packet rate = 100Hz Full (RATE_LORA_2G4_100HZ_8CH: LoRa SF7 BW800, OTA8 = 10 B/packet),
+# telemetry ratio = 1:2. Override with -DRLRS_DEFAULT_RATE=<expresslrs_RFrates_e>
+# and/or -DRLRS_DEFAULT_TLM_RATIO=<expresslrs_tlm_ratio_e>. Comment out for stock ELRS defaults.
+-DRLRS_LINK_DEFAULTS

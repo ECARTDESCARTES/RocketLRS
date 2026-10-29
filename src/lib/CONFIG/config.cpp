@@ -283,7 +283,11 @@ void TxConfig::Load()
 
             // validate the currently selected rate is supported by the hardware and choose an appropriate default if not
             if (!isSupportedRFRate(m_config.model_config[i].rate)) {
+#if defined(RLRS_DEFAULT_RATE)
+                m_config.model_config[i].rate = enumRatetoIndexSafe(RLRS_DEFAULT_RATE);
+#else
                 m_config.model_config[i].rate = enumRatetoIndexSafe(POWER_OUTPUT_VALUES_COUNT == 0 ? RATE_LORA_2G4_250HZ : RATE_LORA_900_200HZ);
+#endif
                 nvs_set_u32(handle, model, Model_to_U32(&m_config.model_config[i]));
             }
         }
@@ -775,6 +779,12 @@ TxConfig::SetDefaults(bool commit)
             SetRate(enumRatetoIndexSafe(POWER_OUTPUT_VALUES_COUNT == 0 ? RATE_LORA_2G4_250HZ : RATE_LORA_900_200HZ));
         #elif defined(RADIO_SX128X)
             SetRate(enumRatetoIndexSafe(RATE_LORA_2G4_250HZ));
+        #endif
+        #if defined(RLRS_DEFAULT_RATE)
+            SetRate(enumRatetoIndexSafe(RLRS_DEFAULT_RATE));
+        #endif
+        #if defined(RLRS_DEFAULT_TLM_RATIO)
+            SetTlm(RLRS_DEFAULT_TLM_RATIO);
         #endif
         SetPower(POWERMGNT::getDefaultPower());
 #if defined(PLATFORM_ESP32)

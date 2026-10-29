@@ -30,6 +30,20 @@ public:
 
 #if defined(TARGET_TX)
 
+// RocketLRS (transport B) : defauts du lien ELRS appliques par TxConfig::SetDefaults().
+// Active par -DRLRS_LINK_DEFAULTS (user_defines.txt). Surchargeable par define.
+// Le rate est un expresslrs_RFrates_e (pas un index brut) : l'index depend de la
+// table radio (SX1280 : index 8, LR1121 : 16, LR2021 : 20 dans src/common.cpp)
+// et se resout par enumRatetoIndexSafe().
+#if defined(RLRS_LINK_DEFAULTS) && !defined(RADIO_SX127X)
+#if !defined(RLRS_DEFAULT_RATE)
+#define RLRS_DEFAULT_RATE       RATE_LORA_2G4_100HZ_8CH   // 100 Hz Full : LoRa SF7 BW800, OTA8
+#endif
+#if !defined(RLRS_DEFAULT_TLM_RATIO)
+#define RLRS_DEFAULT_TLM_RATIO  TLM_RATIO_1_2             // 1 paquet sur 2 en telemetrie (descente)
+#endif
+#endif
+
 #define CONFIG_TX_BUTTON_ACTION_CNT 2
 #define CONFIG_TX_MODEL_CNT         64
 

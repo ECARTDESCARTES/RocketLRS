@@ -637,22 +637,22 @@ void OtaUnpackAirportData(OTA_Packet_s const * const otaPktPtr, FIFO<AP_MAX_BUF_
     }
 }
 
-uint8_t OtaGetRLRSDataCapacity()
+uint8_t ICACHE_RAM_ATTR OtaGetRLRSDataCapacity()
 {
     return OtaIsFullRes ? ELRS8_DATA_UL_BYTES_PER_CALL : ELRS4_DATA_UL_BYTES_PER_CALL;
 }
 
-static uint8_t *OtaRLRSPayload(OTA_Packet_s * const otaPktPtr)
+static uint8_t * ICACHE_RAM_ATTR OtaRLRSPayload(OTA_Packet_s * const otaPktPtr)
 {
     return OtaIsFullRes ? otaPktPtr->full.data_ul.payload : otaPktPtr->std.data_ul.payload;
 }
 
-static const uint8_t *OtaRLRSPayload(OTA_Packet_s const * const otaPktPtr)
+static const uint8_t * ICACHE_RAM_ATTR OtaRLRSPayload(OTA_Packet_s const * const otaPktPtr)
 {
     return OtaIsFullRes ? otaPktPtr->full.data_ul.payload : otaPktPtr->std.data_ul.payload;
 }
 
-void OtaPackRLRSData(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uint8_t length)
+void ICACHE_RAM_ATTR OtaPackRLRSData(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uint8_t length)
 {
     const uint8_t capacity = OtaGetRLRSDataCapacity();
 
@@ -673,11 +673,13 @@ void OtaPackRLRSData(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uin
     const uint8_t copied = std::min(length, capacity);
     if (copied != 0 && payload != nullptr)
         std::memcpy(destination, payload, copied);
+    // RlrsLink stacks several segments per packet: pad with the 0xFF idle
+    // marker, 0x00 would decode as an empty frame of id 0x00 (HEARTBEAT).
     if (copied < capacity)
-        std::memset(destination + copied, 0, capacity - copied);
+        std::memset(destination + copied, 0xFF, capacity - copied);
 }
 
-uint8_t OtaUnpackRLRSData(OTA_Packet_s const * const otaPktPtr, uint8_t *payload, uint8_t maxLength)
+uint8_t ICACHE_RAM_ATTR OtaUnpackRLRSData(OTA_Packet_s const * const otaPktPtr, uint8_t *payload, uint8_t maxLength)
 {
     const uint8_t capacity = OtaGetRLRSDataCapacity();
     const uint8_t copied = std::min(capacity, maxLength);
@@ -686,26 +688,26 @@ uint8_t OtaUnpackRLRSData(OTA_Packet_s const * const otaPktPtr, uint8_t *payload
     return copied;
 }
 
-uint8_t OtaGetRLRSDownlinkCapacity()
+uint8_t ICACHE_RAM_ATTR OtaGetRLRSDownlinkCapacity()
 {
     return static_cast<uint8_t>(OtaIsFullRes
         ? ELRS8_DATA_DL_BYTES_PER_CALL - sizeof(OTA_LinkStats_s)
         : ELRS4_DATA_DL_BYTES_PER_CALL - sizeof(OTA_LinkStats_s));
 }
 
-static uint8_t *OtaRLRSDlPayload(OTA_Packet_s * const otaPktPtr)
+static uint8_t * ICACHE_RAM_ATTR OtaRLRSDlPayload(OTA_Packet_s * const otaPktPtr)
 {
     return OtaIsFullRes ? otaPktPtr->full.data_dl.ul_link_stats.payload
                         : otaPktPtr->std.data_dl.ul_link_stats.payload;
 }
 
-static const uint8_t *OtaRLRSDlPayload(OTA_Packet_s const * const otaPktPtr)
+static const uint8_t * ICACHE_RAM_ATTR OtaRLRSDlPayload(OTA_Packet_s const * const otaPktPtr)
 {
     return OtaIsFullRes ? otaPktPtr->full.data_dl.ul_link_stats.payload
                         : otaPktPtr->std.data_dl.ul_link_stats.payload;
 }
 
-uint8_t OtaPackRLRSDataDl(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uint8_t length)
+uint8_t ICACHE_RAM_ATTR OtaPackRLRSDataDl(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uint8_t length)
 {
     const uint8_t capacity = OtaGetRLRSDownlinkCapacity();
     const uint8_t copied = std::min(length, capacity);
@@ -713,12 +715,13 @@ uint8_t OtaPackRLRSDataDl(OTA_Packet_s * const otaPktPtr, const uint8_t *payload
 
     if (copied != 0 && payload != nullptr)
         std::memcpy(destination, payload, copied);
+    // Same 0xFF padding as OtaPackRLRSData (0x00 is a valid empty frame).
     if (copied < capacity)
-        std::memset(destination + copied, 0, capacity - copied);
+        std::memset(destination + copied, 0xFF, capacity - copied);
     return copied;
 }
 
-uint8_t OtaUnpackRLRSDataDl(OTA_Packet_s const * const otaPktPtr, uint8_t *payload, uint8_t maxLength)
+uint8_t ICACHE_RAM_ATTR OtaUnpackRLRSDataDl(OTA_Packet_s const * const otaPktPtr, uint8_t *payload, uint8_t maxLength)
 {
     const uint8_t capacity = OtaGetRLRSDownlinkCapacity();
     const uint8_t copied = std::min(capacity, maxLength);

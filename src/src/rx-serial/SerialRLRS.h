@@ -14,17 +14,12 @@ public:
     int getMaxSerialReadSize() override;
     void sendQueuedData(uint32_t maxBytesToSend) override;
 
-    // RocketLRS air side, driven from rx_main.
-    bool isTlmQueued() const { return link.airPending(); }
-    uint8_t packAir(uint8_t *destination, uint8_t capacity)
-    {
-        return link.packAir(destination, capacity);
-    }
-    void unpackAir(const uint8_t *source, uint8_t capacity)
-    {
-        link.unpackAir(source, capacity);
-    }
-    void resetLink() { link.reset(); }
+    // RocketLRS air side, driven from rx_main. isTlmQueued/packAir/unpackAir
+    // are called from the radio ISRs: defined in IRAM in SerialRLRS.cpp.
+    bool isTlmQueued() const;
+    uint8_t packAir(uint8_t *destination, uint8_t capacity, uint8_t maxCapacity = 0);
+    void unpackAir(const uint8_t *source, uint8_t capacity);
+    void resetLink() { link.reset(); } // loop() context (GotConnection)
 
     // Queue a LINK_STATS (0xF0) frame for the STM32 with the current RF info.
     void queueLinkStats();

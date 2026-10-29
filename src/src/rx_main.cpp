@@ -462,11 +462,14 @@ void ICACHE_RAM_ATTR LinkStatsToOta(OTA_LinkStats_s * const ls)
 }
 
 // Fill the RLRS container of a downlink packet (DATA or LINKSTATS). The
-// LINKSTATS container is smaller because it also carries the RF statistics.
-static void PackRlrsDl(OTA_Packet_s * const otaPktPtr, uint8_t capacity)
+// LINKSTATS container is smaller because it also carries the RF statistics;
+// a frame that fits whole in the next DATA container waits for it instead of
+// being split here.
+static void ICACHE_RAM_ATTR PackRlrsDl(OTA_Packet_s * const otaPktPtr, uint8_t capacity)
 {
     uint8_t payload[ELRS8_DATA_DL_BYTES_PER_CALL];
-    uint8_t length = ((SerialRLRS *)serialIO)->packAir(payload, capacity);
+    uint8_t length = ((SerialRLRS *)serialIO)->packAir(payload, capacity,
+                                                       OtaGetRLRSDataCapacity());
     if (length == 0)
     {
         payload[0] = 0xFF; // idle marker, no RLRS frame in this packet

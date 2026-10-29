@@ -9,6 +9,22 @@ SerialRLRS::SerialRLRS(Stream &out, Stream &in) : SerialIO(&out, &in)
     link.reset();
 }
 
+bool ICACHE_RAM_ATTR SerialRLRS::isTlmQueued() const
+{
+    return link.airPending();
+}
+
+uint8_t ICACHE_RAM_ATTR SerialRLRS::packAir(uint8_t *destination, uint8_t capacity,
+                                            uint8_t maxCapacity)
+{
+    return link.packAir(destination, capacity, maxCapacity);
+}
+
+void ICACHE_RAM_ATTR SerialRLRS::unpackAir(const uint8_t *source, uint8_t capacity)
+{
+    link.unpackAir(source, capacity);
+}
+
 uint32_t SerialRLRS::sendRCFrame(bool frameAvailable, bool frameMissed, uint32_t *channelData)
 {
     return DURATION_IMMEDIATELY;

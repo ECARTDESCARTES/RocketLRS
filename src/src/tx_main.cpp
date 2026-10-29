@@ -976,6 +976,10 @@ static void UpdateConnectDisconnectStatus()
       apInputBuffer.flush();
       apOutputBuffer.flush();
       uartInputBuffer.flush();
+      // The rocket resets its link on (re)connection: drop any half
+      // reassembled frame so its head is never completed by another frame.
+      if (firmwareOptions.is_rocketlrs)
+        rlrsLink.resetReassembly();
     }
   }
   // If past RX_LOSS_CNT, or in awaitingModelId state for longer than DisconnectTimeoutMs, go to disconnected

@@ -6,4 +6,12 @@
 #include "RlrsParser.h"
 #include "RlrsProtocol.h"
 #include "FIFO.h"
+// Seen by the PlatformIO library finder here (it does not follow the
+// relative include below): framework Wi-Fi library used by disableWifi().
+#if defined(PLATFORM_ESP8266)
+#include <ESP8266WiFi.h>
+#elif defined(PLATFORM_ESP32)
+#include <WiFi.h>
+#endif
+#include "helpers.h"
 #include "../examples/rlrs-radio/main.cpp"
