@@ -104,7 +104,7 @@ static void VtxConfigToMSPOut()
 
 static bool initialize()
 {
-    if (firmwareOptions.is_airport)
+    if (firmwareOptions.is_airport || firmwareOptions.is_rocketlrs)
     {
         return false;
     }

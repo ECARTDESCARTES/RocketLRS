@@ -709,7 +709,7 @@ void TXModuleEndpoint::SetTlmRatio(uint8_t idx)
   {
     const bool isMavlinkMode = config.GetLinkMode() == TX_MAVLINK_MODE;
     // Don't allow TLM ratio changes if using AIRPORT or Mavlink
-    if (!firmwareOptions.is_airport && !isMavlinkMode)
+    if ((!firmwareOptions.is_airport && !firmwareOptions.is_rocketlrs) && !isMavlinkMode)
     {
       config.SetTlm(eRatio);
       // Update the telemetry ratio immediately, rather than wait the agonizing 5 seconds for the next sync
@@ -836,7 +836,7 @@ void TXModuleEndpoint::registerParameters()
     registerParameter(&luaTlmRate, [this](propertiesCommon *item, uint8_t arg) {
       SetTlmRatio(arg);
     });
-    if (!firmwareOptions.is_airport)
+    if (!firmwareOptions.is_airport && !firmwareOptions.is_rocketlrs)
     {
       registerParameter(&luaSwitch, [this](propertiesCommon *item, uint8_t arg) {
         SetSwitchMode(arg);
@@ -861,7 +861,7 @@ void TXModuleEndpoint::registerParameters()
         setWarningFlag(LUA_FLAG_ERROR_CONNECTED, true);
       }
     });
-    if (!firmwareOptions.is_airport)
+    if (!firmwareOptions.is_airport && !firmwareOptions.is_rocketlrs)
     {
       registerParameter(&luaModelMatch, [this](propertiesCommon *item, uint8_t arg) {
         bool newModelMatch = arg;

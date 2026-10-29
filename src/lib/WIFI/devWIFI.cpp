@@ -1437,6 +1437,13 @@ static void HandleWebUpdate()
 static int start()
 {
   ipAddress.fromString(wifi_ap_address);
+#if defined(TARGET_TX)
+  // AirPort offers Wi-Fi after 30 seconds unless a receiver has replied.
+  if (firmwareOptions.is_airport)
+  {
+    return 30000;
+  }
+#endif
   return firmwareOptions.wifi_auto_on_interval;
 }
 
@@ -1487,8 +1494,8 @@ static int timeout()
   #if defined(TARGET_TX)
   // if webupdate was requested before or .wifi_auto_on_interval has elapsed but uart is not detected
   // start webupdate, there might be wrong configuration flashed.
-  if(firmwareOptions.wifi_auto_on_interval != -1 && webserverPreventAutoStart == false && connectionState < wifiUpdate && !wifiStarted){
-    DBGLN("No CRSF ever detected, starting WiFi");
+  if ((firmwareOptions.is_airport || firmwareOptions.is_rocketlrs || firmwareOptions.wifi_auto_on_interval != -1) && !webserverPreventAutoStart && connectionState < wifiUpdate && !wifiStarted) {
+    DBGLN("Auto WiFi timeout, starting WiFi");
     setWifiUpdateMode();
     return DURATION_IMMEDIATELY;
   }

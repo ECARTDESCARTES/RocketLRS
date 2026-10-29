@@ -61,6 +61,14 @@ def process_json_flag(define):
                 json_flags['rcvr-uart-baud'] = int(dequote(parts.group(2)))
             else:
                 json_flags['airport-uart-baud'] = int(dequote(parts.group(2)))
+        if parts.group(1) == "USE_ROCKETLRS_AT_BAUD":
+            parts = re.search(r"-D(.*)\s*=\s*\"?([0-9]+).*\"?$", define)
+            json_flags['is-rocketlrs'] = True
+            json_flags['is-airport'] = False
+            if isRX:
+                json_flags['rcvr-uart-baud'] = int(dequote(parts.group(2)))
+            else:
+                json_flags['airport-uart-baud'] = int(dequote(parts.group(2)))
     if define == "-DUNLOCK_HIGHER_POWER"  and not isRX:
         json_flags['unlock-higher-power'] = True
     if define == "-DLOCK_ON_FIRST_CONNECTION" and isRX:

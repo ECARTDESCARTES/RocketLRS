@@ -37,6 +37,9 @@ class InfoPanel extends LitElement {
                         ${elrsState.options['is-airport'] ?
                                 html`<tr><td><b>Airport Mode</b></td><td>Enabled</td></tr>`
                                 : ''}
+                        ${elrsState.options['is-rocketlrs'] ?
+                                html`<tr><td><b>RocketLRS Mode</b></td><td>Enabled</td></tr>`
+                                : ''}
                         ${elrsState.options['wifi-on-interval'] !== 60 ?
                                 html`<tr><td><b>Wifi Auto-on Interval</b></td><td>${elrsState.options['wifi-on-interval']}</td></tr>`
                                 : ''}
@@ -81,7 +84,7 @@ class InfoPanel extends LitElement {
     _hasCustomSettings() {
         let custom = false
         // customised hardware settings
-        custom = elrsState.options['is-airport'] || elrsState.options['wifi-on-interval'] !== 60
+        custom = elrsState.options['is-airport'] || elrsState.options['is-rocketlrs'] || elrsState.options['wifi-on-interval'] !== 60
 
         // FEATURE: NOT IS_TX
         custom |= elrsState.config['pwm'] === undefined && elrsState.config['serial-protocol'] !== 0

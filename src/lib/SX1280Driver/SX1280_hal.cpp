@@ -200,33 +200,42 @@ uint8_t ICACHE_RAM_ATTR SX1280Hal::ReadRegister(uint16_t address, SX12XX_Radio_N
 
 void ICACHE_RAM_ATTR SX1280Hal::WriteBuffer(uint8_t offset, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber)
 {
-    WORD_ALIGNED_ATTR uint8_t OutBuffer[WORD_PADDED(size + 2)] = {
-        SX1280_RADIO_WRITE_BUFFER,
-        offset
-    };
-
-    memcpy(OutBuffer + 2, buffer, size);
-
-    WaitOnBusy(radioNumber);
-
-    SPIEx.write(radioNumber, OutBuffer, size + 2);
-
-    BusyDelay(15);
+    // SPIEx has a 64-byte hardware FIFO. Each command includes two bytes.
+    // Splitting SPI writes still fills ONE radio packet before SET_TX.
+    while (size)
+    {
+        const uint8_t count = size > 62 ? 62 : size;
+        WORD_ALIGNED_ATTR uint8_t OutBuffer[64] = {SX1280_RADIO_WRITE_BUFFER, offset};
+        memcpy(OutBuffer + 2, buffer, count);
+        WaitOnBusy(radioNumber);
+        // Intermediate writes must finish before checking BUSY for the next
+        // command. SPIEx.read clocks the same MOSI bytes but waits for completion;
+        // its returned MISO bytes are intentionally ignored here.
+        if (size > count)
+            SPIEx.read(radioNumber, OutBuffer, count + 2);
+        else
+            SPIEx.write(radioNumber, OutBuffer, count + 2);
+        BusyDelay(15);
+        buffer += count;
+        offset += count;
+        size -= count;
+    }
 }
 
 void ICACHE_RAM_ATTR SX1280Hal::ReadBuffer(uint8_t offset, uint8_t *buffer, uint8_t size, SX12XX_Radio_Number_t radioNumber)
 {
-    WORD_ALIGNED_ATTR uint8_t OutBuffer[WORD_PADDED(size + 3)] = {
-        SX1280_RADIO_READ_BUFFER,
-        offset,
-        0x00
-    };
-
-    WaitOnBusy(radioNumber);
-
-    SPIEx.read(radioNumber, OutBuffer, size + 3);
-
-    memcpy(buffer, OutBuffer + 3, size);
+    // Read command + offset + dummy byte leave 61 data bytes per SPI transfer.
+    while (size)
+    {
+        const uint8_t count = size > 61 ? 61 : size;
+        WORD_ALIGNED_ATTR uint8_t OutBuffer[64] = {SX1280_RADIO_READ_BUFFER, offset, 0};
+        WaitOnBusy(radioNumber);
+        SPIEx.read(radioNumber, OutBuffer, count + 3);
+        memcpy(buffer, OutBuffer + 3, count);
+        buffer += count;
+        offset += count;
+        size -= count;
+    }
 }
 
 bool ICACHE_RAM_ATTR SX1280Hal::WaitOnBusy(SX12XX_Radio_Number_t radioNumber)

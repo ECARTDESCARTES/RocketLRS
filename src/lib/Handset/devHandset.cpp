@@ -34,7 +34,7 @@ static int start()
     // AirPort dedicates UART0 to the transparent serial (see setupSerial in
     // tx_main.cpp). The CRSF handset would reconfigure/steal UART0, so it must
     // not start in AirPort mode.
-    if (firmwareOptions.is_airport)
+    if (firmwareOptions.is_airport ||firmwareOptions.is_rocketlrs)
         return DURATION_NEVER;
 #endif
     handset->Begin();

@@ -1,11 +1,12 @@
-import FEATURES from "../features.js";
+import {deriveFeatures} from "../features.js";
 
 // Dev plugin: provide mock ELRS endpoints to the local Vite server.
 //
 // Use this when you need a hardware-free UI workflow or deterministic test
 // data. Do not use it to validate behavior that depends on a real device or
 // real network timing.
-export function devMockPlugin() {
+export function devMockPlugin({env = process.env, profile} = {}) {
+    const FEATURES = deriveFeatures(env)
     const PAGE_LOAD_DELAY_MS = 450
     const MODULE_LOAD_DELAY_MS = 800
     let cwGetRequestCount = 0
@@ -59,7 +60,8 @@ export function devMockPlugin() {
             "uid": [1, 2, 3, 4, 5, 6],   // this is the 'flashed' UID and may be empty if using traditional binding on an RX.
             "tlm-interval": 240,
             "fan-runtime": 30,
-            "is-airport": true,
+            "is-airport": false,
+            "is-rocketlrs": true,
             "rcvr-uart-baud": 420000,
             "airport-uart-baud": 9600,
             "lock-on-first-connection": true,
@@ -72,7 +74,7 @@ export function devMockPlugin() {
             uid: [5, 4, 3, 2, 1, 0],  // current UID, different to options if traditional binding or on-loan
             // RX config
             modelid: 62,
-            'force-tlm': true,
+            'force-tlm': false,
             'serial-protocol': 1,
             'serial1-protocol': 0,
             'sbus-failsafe': 0,
@@ -103,8 +105,12 @@ export function devMockPlugin() {
             ]
         }
     }
+    if (profile?.settings) {
+        Object.assign(stubState.settings, profile.settings)
+        stubState.config = structuredClone(profile.config)
+    }
     let networkQueryCount = 0
-    const hardwareState = {
+    const hardwareState = profile?.hardware ? structuredClone(profile.hardware) : {
         serial_rx: 3,
         serial_tx: 1,
         radio_miso: 33,
@@ -248,7 +254,7 @@ export function devMockPlugin() {
                     networkQueryCount = 0
                     if (stubState.settings['module-type'] === 'RX') {
                         stubState.settings.voltage_source_count = voltageSources.length
-                        stubState.settings.has_gps = true
+                        stubState.settings.has_gps = !profile?.hardware
                     } else {
                         delete stubState.settings.voltage_source_count
                         delete stubState.settings.has_gps

@@ -9,6 +9,8 @@ import { viteEsp32HeaderPlugin } from './build-plugins/esp32-header-plugin.js'
 
 // Simple dev mock server plugin
 import { devMockPlugin } from './dev-plugins/dev-mock-plugin.js'
+import { getDevProfile } from './dev-plugins/dev-profiles.js'
+import { devProfilePlugin } from './dev-plugins/dev-profile-plugin.js'
 
 // Proxy plugin for devlopment against real hardware
 import { devProxyPlugin } from './dev-plugins/dev-proxy-plugin.js'
@@ -16,6 +18,11 @@ import { devProxyPlugin } from './dev-plugins/dev-proxy-plugin.js'
 // Export standard Vite config with the plugin enabled for builds
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const useMock = command === 'serve' && !env.VITE_ELRS_PROXY_TARGET
+  const profile = useMock
+    ? getDevProfile(process.env.ELRS_DEV_PROFILE || env.ELRS_DEV_PROFILE || (env.VITE_FEATURE_IS_TX === 'true' ? 'ranger-nano' : 'rp1'))
+    : null
+  if (profile) Object.assign(env, profile.env)
   return {
     plugins: [
       htmlFeatureBlocksPlugin(env),
@@ -44,7 +51,7 @@ export default defineConfig(({ command, mode }) => {
         ? [
             env.VITE_ELRS_PROXY_TARGET
               ? devProxyPlugin({ target: env.VITE_ELRS_PROXY_TARGET })
-              : devMockPlugin()
+              : [devProfilePlugin(profile), devMockPlugin({env, profile})]
           ]
         : []),
     ],

@@ -21,6 +21,7 @@
 #include "rx-serial/SerialSBUS.h"
 #include "rx-serial/SerialSUMD.h"
 #include "rx-serial/SerialAirPort.h"
+#include "rx-serial/SerialRLRS.h"
 #include "rx-serial/SerialHoTT_TLM.h"
 #include "rx-serial/SerialScorpion_TLM.h"
 #include "rx-serial/SerialMavlink.h"
@@ -460,6 +461,20 @@ void ICACHE_RAM_ATTR LinkStatsToOta(OTA_LinkStats_s * const ls)
     } \
 }
 
+// Fill the RLRS container of a downlink packet (DATA or LINKSTATS). The
+// LINKSTATS container is smaller because it also carries the RF statistics.
+static void PackRlrsDl(OTA_Packet_s * const otaPktPtr, uint8_t capacity)
+{
+    uint8_t payload[ELRS8_DATA_DL_BYTES_PER_CALL];
+    uint8_t length = ((SerialRLRS *)serialIO)->packAir(payload, capacity);
+    if (length == 0)
+    {
+        payload[0] = 0xFF; // idle marker, no RLRS frame in this packet
+        length = 1;
+    }
+    OtaPackRLRSDataDl(otaPktPtr, payload, length);
+}
+
 bool ICACHE_RAM_ATTR HandleSendDataDl()
 {
     uint8_t modresult = OtaNonce % ExpressLRS_currTlmDenom;
@@ -479,6 +494,9 @@ bool ICACHE_RAM_ATTR HandleSendDataDl()
     if (firmwareOptions.is_airport)
     {
         tlmQueued = ((SerialAirPort *)serialIO)->isTlmQueued();
+    }else if (firmwareOptions.is_rocketlrs)
+    {
+        tlmQueued = ((SerialRLRS *)serialIO)->isTlmQueued();
     }
     else
     {
@@ -492,11 +510,15 @@ bool ICACHE_RAM_ATTR HandleSendDataDl()
         {
             GenerateOtaDataDl(full, data_dl.ul_link_stats,
                 &otaPkt.full.data_dl.ul_link_stats.stats);
+            if (firmwareOptions.is_rocketlrs)
+                PackRlrsDl(&otaPkt, OtaGetRLRSDownlinkCapacity());
         }
         else
         {
             GenerateOtaDataDl(std, data_dl.ul_link_stats,
                 &otaPkt.std.data_dl.ul_link_stats.stats);
+            if (firmwareOptions.is_rocketlrs)
+                PackRlrsDl(&otaPkt, OtaGetRLRSDownlinkCapacity());
         }
 
         NextTelemetryType = PACKET_TYPE_DATA;
@@ -519,6 +541,20 @@ bool ICACHE_RAM_ATTR HandleSendDataDl()
         if (firmwareOptions.is_airport)
         {
             OtaPackAirportData(&otaPkt, &((SerialAirPort *)serialIO)->apInputBuffer);
+        }else if(firmwareOptions.is_rocketlrs)
+        {
+            uint8_t payload[ELRS8_DATA_DL_BYTES_PER_CALL];
+            const uint8_t length =
+                ((SerialRLRS *)serialIO)->packAir(payload, OtaGetRLRSDataCapacity());
+            if (length == 0)
+            {
+                payload[0] = 0xFF; // idle marker, no RLRS frame in this packet
+                OtaPackRLRSData(&otaPkt, payload, 1);
+            }
+            else
+            {
+                OtaPackRLRSData(&otaPkt, payload, length);
+            }
         }
         else if (OtaIsFullRes)
         {
@@ -883,6 +919,9 @@ void GotConnection(unsigned long now)
     {
         ((SerialAirPort *)serialIO)->apInputBuffer.flush();
         ((SerialAirPort *)serialIO)->apOutputBuffer.flush();
+    }else if (firmwareOptions.is_rocketlrs)
+    {
+        ((SerialRLRS *)serialIO)->resetLink();
     }
 
     DBGLN("got conn");
@@ -943,6 +982,12 @@ static void ICACHE_RAM_ATTR ProcessRfPacket_DataUl(OTA_Packet_s const * const ot
     if (firmwareOptions.is_airport)
     {
         OtaUnpackAirportData(otaPktPtr, &((SerialAirPort *)serialIO)->apOutputBuffer);
+        return;
+    }else if (firmwareOptions.is_rocketlrs)
+    {
+        uint8_t payload[ELRS8_DATA_UL_BYTES_PER_CALL];
+        const uint8_t length = OtaUnpackRLRSData(otaPktPtr, payload, sizeof(payload));
+        ((SerialRLRS *)serialIO)->unpackAir(payload, length);
         return;
     }
 
@@ -1293,7 +1338,7 @@ static void setupSerial()
         serialIO = new SerialNOOP();
         return;
     }
-    if (config.GetSerialProtocol() == PROTOCOL_CRSF || config.GetSerialProtocol() == PROTOCOL_INVERTED_CRSF || firmwareOptions.is_airport)
+    if (config.GetSerialProtocol() == PROTOCOL_CRSF || config.GetSerialProtocol() == PROTOCOL_INVERTED_CRSF || firmwareOptions.is_airport || firmwareOptions.is_rocketlrs)
     {
         serialBaud = firmwareOptions.uart_baud;
     }
@@ -1372,6 +1417,9 @@ static void setupSerial()
     if (firmwareOptions.is_airport)
     {
         serialIO = new SerialAirPort(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
+    }else if (firmwareOptions.is_rocketlrs)
+    {
+        serialIO = new SerialRLRS(SERIAL_PROTOCOL_TX, SERIAL_PROTOCOL_RX);
     }
     else if (sbusSerialOutput)
     {
@@ -1879,6 +1927,18 @@ static void checkSendLinkStatsToFc(uint32_t now)
     }
 }
 
+static void checkSendRlrsLinkStats(uint32_t now)
+{
+    static uint32_t lastSent = 0;
+
+    if (serialIO == nullptr || now - lastSent < 1000)
+        return;
+
+    lastSent = now;
+    getRFlinkInfo();
+    ((SerialRLRS *)serialIO)->queueLinkStats();
+}
+
 static void debugRcvrLinkstats()
 {
 #if defined(DEBUG_RCVR_LINKSTATS)
@@ -2151,7 +2211,14 @@ void loop()
         GotConnection(now);
     }
 
-    checkSendLinkStatsToFc(now);
+    if (firmwareOptions.is_rocketlrs)
+    {
+        checkSendRlrsLinkStats(now);
+    }
+    else
+    {
+        checkSendLinkStatsToFc(now);
+    }
 
     if ((RXtimerState == tim_tentative) && ((now - GotConnectionMillis) > ConsiderConnGoodMillis) && (abs(LPF_OffsetDx.value()) <= 5))
     {

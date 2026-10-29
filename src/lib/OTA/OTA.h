@@ -7,6 +7,7 @@
 #include "crsf_protocol.h"
 #include "telemetry_protocol.h"
 #include "FIFO.h"
+#include "RlrsParser.h"
 
 #define UID_LEN             6
 
@@ -207,6 +208,19 @@ bool OtaIsChannelDataComplete(uint32_t const *channelData);
 
 void OtaPackAirportData(OTA_Packet_s * const otaPktPtr, FIFO<AP_MAX_BUF_LEN> *inputBuffer);
 void OtaUnpackAirportData(OTA_Packet_s const * const otaPktPtr, FIFO<AP_MAX_BUF_LEN> *outputBuffer);
+
+// RocketLRS uses the DATA packet payload as a byte-transparent container.
+// The payload is zero padded; unpack returns the full container capacity so
+// the link layer can decode the self-describing segment inside it.
+uint8_t OtaGetRLRSDataCapacity();
+void OtaPackRLRSData(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uint8_t length);
+uint8_t OtaUnpackRLRSData(OTA_Packet_s const * const otaPktPtr, uint8_t *payload, uint8_t maxLength);
+
+// LINKSTATS packets also carry link statistics, so their RLRS container is
+// smaller. Both directions still use them to move RLRS bytes.
+uint8_t OtaGetRLRSDownlinkCapacity();
+uint8_t OtaPackRLRSDataDl(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uint8_t length);
+uint8_t OtaUnpackRLRSDataDl(OTA_Packet_s const * const otaPktPtr, uint8_t *payload, uint8_t maxLength);
 
 #if defined(DEBUG_RCVR_LINKSTATS)
 extern uint32_t debugRcvrLinkstatsPacketId;

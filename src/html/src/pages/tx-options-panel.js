@@ -8,6 +8,7 @@ import {postWithFeedback} from "../utils/feedback.js"
 class TxOptionsPanel extends LitElement {
     @state() accessor domain
     @state() accessor isAirport
+    @state() accessor isRocketLRS
     @state() accessor baudRate
     @state() accessor tlmInterval
     @state() accessor fanRuntime
@@ -16,6 +17,7 @@ class TxOptionsPanel extends LitElement {
         this.domain = elrsState.options.domain
         this.isAirport = elrsState.options['is-airport']
         this.baudRate = elrsState.options['airport-uart-baud']
+        this.isRocketLRS = elrsState.options['is-rocketlrs']
         this.tlmInterval = elrsState.options['tlm-interval']
         this.fanRuntime = elrsState.options['fan-runtime']
         return this
@@ -50,9 +52,21 @@ class TxOptionsPanel extends LitElement {
                     </div>
                     <div class="mui-checkbox">
                         <input id="airport" type='checkbox'
-                               @change="${(e) => this.isAirport = e.target.checked}"
+                               @change="${(e) => {
+                                                this.isAirport = e.target.checked
+                                                this.isRocketLRS = !e.target.checked
+                                            }}"
                                ?checked="${this.isAirport}">
                         <label for="airport">Use as AirPort Serial device</label>
+                    </div>
+                    <div class="mui-checkbox">
+                        <input id="rocketlrs" type='checkbox'
+                               @change="${(e) => {
+                                                this.isAirport = !e.target.checked
+                                                this.isRocketLRS = e.target.checked
+                                            }}"
+                               ?checked="${this.isRocketLRS}">
+                        <label for="rocketlrs">Enable RocketLRS mode</label>
                     </div>
                     ${this.isAirport ? html`
                         <div class="mui-textfield">
@@ -90,6 +104,7 @@ class TxOptionsPanel extends LitElement {
             'tlm-interval': this.tlmInterval,
             'fan-runtime': this.fanRuntime,
             'is-airport': this.isAirport,
+            'is-rocketlrs': this.isRocketLRS,
             'airport-uart-baud': this.baudRate
         }
         saveOptions(changes, () => {
@@ -105,6 +120,7 @@ class TxOptionsPanel extends LitElement {
         changed |= this.tlmInterval !== elrsState.options['tlm-interval']
         changed |= this.fanRuntime !== elrsState.options['fan-runtime']
         changed |= this.isAirport !== elrsState.options['is-airport']
+        changed |= this.isRocketLRS !== elrsState.options['is-rocketlrs']
         changed |= this.baudRate !== elrsState.options['airport-uart-baud']
         return !!changed
     }

@@ -70,7 +70,10 @@ public:
     bool (*RXdoneCallback)(rx_status crcFail); //function pointer for callback
     void (*TXdoneCallback)(); //function pointer for callback
 
-    #define RXBuffSize 16
+    #ifndef SX12XX_RX_BUFFER_SIZE
+    #define SX12XX_RX_BUFFER_SIZE 16
+    #endif
+    #define RXBuffSize SX12XX_RX_BUFFER_SIZE
     WORD_ALIGNED_ATTR uint8_t RXdataBuffer[RXBuffSize];
     WORD_ALIGNED_ATTR uint8_t RXdataBufferSecond[RXBuffSize];
 

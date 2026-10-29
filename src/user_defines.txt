@@ -98,3 +98,8 @@
 
 # Use an ELRS TX and RX as a transparent UART over the air
 #-DUSE_AIRPORT_AT_BAUD=9600
+
+### ROCKETLRS ###
+# Transparent RocketLRS link over ELRS (replaces Airport).
+# The baud rate is the RLRS UART rate used by the Java app / STM32.
+-DUSE_ROCKETLRS_AT_BAUD=9600

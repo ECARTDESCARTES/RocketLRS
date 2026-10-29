@@ -1,6 +1,7 @@
 #include "targets.h"
 #include "common.h"
 #include "devLED.h"
+#include "options.h"
 
 #if defined(TARGET_TX)
 #include "POWERMGNT.h"
@@ -12,6 +13,7 @@ constexpr uint8_t LEDSEQ_WIFI_UPDATE[] = { 2, 3 };     // 20ms on, 30ms off
 constexpr uint8_t LEDSEQ_BINDING[] = { 10, 10, 10, 100 };   // 2x 100ms blink, 1s pause
 constexpr uint8_t LEDSEQ_MODEL_MISMATCH[] = { 10, 10, 10, 10, 10, 100 };   // 3x 100ms blink, 1s pause
 constexpr uint8_t LEDSEQ_UPDATE[] = { 20, 5, 5, 5, 5, 40 };   // 200ms on, 2x 50ms off/on, 400ms off
+constexpr uint8_t RLRS_CONNECTED[] = { 20, 10, 50, 20 }; // 200ms on, 100ms off, 500ms on, 200ms off
 
 static int8_t _pin = -1;
 static uint8_t _pin_inverted;
@@ -137,6 +139,9 @@ static int event()
         }
         else if (GPIO_PIN_LED_GREEN != UNDEF_PIN)
         {
+            if(firmwareOptions.is_rocketlrs){
+                return flashLED(GPIO_PIN_LED_RED, GPIO_LED_RED_INVERTED, RLRS_CONNECTED, sizeof(RLRS_CONNECTED));
+            }
             digitalWrite(GPIO_PIN_LED_GREEN, HIGH ^ GPIO_LED_GREEN_INVERTED);
         }
         if (GPIO_PIN_LED_RED != UNDEF_PIN)

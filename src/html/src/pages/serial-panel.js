@@ -8,18 +8,22 @@ import {SERIAL_OPTIONS1, SERIAL_OPTIONS2} from "../utils/globals.js"
 @customElement('serial-panel')
 class SerialPanel extends LitElement {
 
-    PROTOCOL_AIRPORT = SERIAL_OPTIONS1.length - 1
+    PROTOCOL_AIRPORT = SERIAL_OPTIONS1.length - 2
+    PROTOCOL_RLRS = SERIAL_OPTIONS1.length - 1
 
     @state() accessor serial1Protocol
     @state() accessor serial2Protocol
     @state() accessor baudRate
     @state() accessor sbusFailsafe
     @state() accessor isAirport
+    @state() accessor isRocketLRS
     @state() accessor djiArmed
 
     createRenderRoot() {
-        this.isAirport = elrsState.options['is-airport']
-        this.serial1Protocol = this.isAirport ? this.PROTOCOL_AIRPORT : elrsState.config['serial-protocol']
+        this.isAirport = !!elrsState.options['is-airport']
+        this.isRocketLRS = !this.isAirport && !!elrsState.options['is-rocketlrs']
+        this.serial1Protocol = this.isAirport ? this.PROTOCOL_AIRPORT :
+            this.isRocketLRS ? this.PROTOCOL_RLRS : elrsState.config['serial-protocol']
         this.serial2Protocol = elrsState.config['serial1-protocol']
         this.baudRate = elrsState.options['rcvr-uart-baud']
         this.sbusFailsafe = elrsState.config['sbus-failsafe']
@@ -57,7 +61,7 @@ class SerialPanel extends LitElement {
                         <input size='7' type='number'
                                @input=${(e) => this.baudRate = parseInt(e.target.value)}
                                .value="${this.baudRate}" />
-                        <label>CRSF/Airport baud</label>
+                        <label>CRSF/AirPort/RocketLRS baud</label>
                     </div>
                     ` : ''}
                     ${this._sbusSelected() ? html`
@@ -146,8 +150,12 @@ class SerialPanel extends LitElement {
     _updateSerial1(e) {
         this.serial1Protocol = Number(e.target.value)
         this.isAirport = this.serial1Protocol === this.PROTOCOL_AIRPORT
+        this.isRocketLRS = this.serial1Protocol === this.PROTOCOL_RLRS
         if (this.serial1Protocol === 0 || this.serial1Protocol === 1) {
             this.baudRate = 420000
+            this.requestUpdate()
+        }else if (this.isRocketLRS) {
+            this.baudRate = 9600
             this.requestUpdate()
         }
     }
@@ -161,7 +169,7 @@ class SerialPanel extends LitElement {
     }
 
     _displayBaudRate() {
-        return this.isAirport || this.serial1Protocol === 0 || this.serial1Protocol === 1 || this.serial2Protocol === 1 || this.serial2Protocol === 2
+        return this.isAirport || this.isRocketLRS || this.serial1Protocol === 0 || this.serial1Protocol === 1 || this.serial2Protocol === 1 || this.serial2Protocol === 2
     }
 
     _sbusSelected() {
@@ -173,12 +181,12 @@ class SerialPanel extends LitElement {
     }
 
     _configChanged() {
-        return (!this.isAirport && this.serial1Protocol !== elrsState.config['serial-protocol']) ||
+        return (!this.isAirport && !this.isRocketLRS && this.serial1Protocol !== elrsState.config['serial-protocol']) ||
             this.serial2Protocol !== elrsState.config['serial1-protocol'] ||
             this.sbusFailsafe !== elrsState.config['sbus-failsafe']
     }
     _optionsChanged() {
-        return this.isAirport !== elrsState.options['is-airport'] ||
+        return this.isAirport !== elrsState.options['is-airport'] || this.isRocketLRS !== elrsState.options['is-rocketlrs'] ||
             this.baudRate !== elrsState.options['rcvr-uart-baud'] ||
             this.djiArmed !== elrsState.options['dji-permanently-armed']
     }
@@ -192,11 +200,12 @@ class SerialPanel extends LitElement {
         saveOptionsAndConfig({
                 options: {
                     'is-airport': this.isAirport,
+                    'is-rocketlrs': this.isRocketLRS,
                     'rcvr-uart-baud': this.baudRate,
                     'dji-permanently-armed': this.djiArmed,
                 },
                 config: {
-                    'serial-protocol': this.isAirport ? 0 : this.serial1Protocol,
+                    'serial-protocol': (this.isAirport || this.isRocketLRS) ? 0 : this.serial1Protocol,
                     'serial1-protocol': this.serial2Protocol,
                     'sbus-failsafe': this.sbusFailsafe
                 }

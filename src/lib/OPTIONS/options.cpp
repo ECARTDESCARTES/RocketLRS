@@ -85,6 +85,7 @@ void saveOptions(Stream &stream, bool customised)
     doc["dji-permanently-armed"] = firmwareOptions.dji_permanently_armed;
     #endif
     doc["is-airport"] = firmwareOptions.is_airport;
+    doc["is-rocketlrs"] = firmwareOptions.is_rocketlrs;
     doc["domain"] = firmwareOptions.domain;
     doc["customised"] = customised;
     doc["flash-discriminator"] = firmwareOptions.flash_discriminator;
@@ -186,20 +187,31 @@ static void options_LoadFromFlashOrFile(EspFlashStream &strmFlash)
     firmwareOptions.uart_baud = doc["airport-uart-baud"] | USE_AIRPORT_AT_BAUD;
     firmwareOptions.is_airport = doc["is-airport"] | true;
     #else
-    firmwareOptions.uart_baud = doc["airport-uart-baud"] | 460800;
-    firmwareOptions.is_airport = doc["is-airport"] | false;
+    firmwareOptions.uart_baud = doc["airport-uart-baud"] | 9600;
+    firmwareOptions.is_airport = doc["is-airport"] | true; // Enable Airport by default
     #endif
     #else
     #if defined(USE_AIRPORT_AT_BAUD)
     firmwareOptions.uart_baud = doc["rcvr-uart-baud"] | USE_AIRPORT_AT_BAUD;
     firmwareOptions.is_airport = doc["is-airport"] | true;
     #else
-    firmwareOptions.uart_baud = doc["rcvr-uart-baud"] | 420000;
-    firmwareOptions.is_airport = doc["is-airport"] | false;
+    firmwareOptions.uart_baud = doc["rcvr-uart-baud"] | 9600;
+    firmwareOptions.is_airport = doc["is-airport"] | true; // Enable Airport by default
     #endif
     firmwareOptions.lock_on_first_connection = doc["lock-on-first-connection"] | true;
     firmwareOptions.dji_permanently_armed = doc["dji-permanently-armed"] | false;
     #endif
+    firmwareOptions.is_rocketlrs = doc["is-rocketlrs"] | false;
+    #if defined(USE_ROCKETLRS_AT_BAUD)
+    firmwareOptions.is_rocketlrs = true;
+    #if defined(TARGET_TX)
+    firmwareOptions.uart_baud = doc["airport-uart-baud"] | USE_ROCKETLRS_AT_BAUD;
+    #else
+    firmwareOptions.uart_baud = doc["rcvr-uart-baud"] | USE_ROCKETLRS_AT_BAUD;
+    #endif
+    #endif
+    if (firmwareOptions.is_rocketlrs)
+        firmwareOptions.is_airport = false;
     firmwareOptions.domain = doc["domain"] | 0;
     firmwareOptions.flash_discriminator = doc["flash-discriminator"] | 0U;
 

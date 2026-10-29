@@ -38,6 +38,7 @@ void sendMAVLinkTelemetryToBackpack(uint8_t *) {}
 #include "TXModuleEndpoint.h"
 #include "TXOTAConnector.h"
 #include "TXUSBConnector.h"
+#include "RlrsLink.h"
 
 #if defined(PLATFORM_ESP8266)
 #include <user_interface.h>
@@ -51,6 +52,10 @@ Stream *TxUSB;
 // Variables / constants for Airport //
 FIFO<AP_MAX_BUF_LEN> apInputBuffer;
 FIFO<AP_MAX_BUF_LEN> apOutputBuffer;
+
+// RocketLRS transparent link (framing, priority queue, reassembly).
+RlrsLink rlrsLink;
+
 
 #define UART_INPUT_BUF_LEN 1024
 FIFO<UART_INPUT_BUF_LEN> uartInputBuffer;
@@ -241,6 +246,12 @@ static bool ICACHE_RAM_ATTR ProcessDownlinkPacket(SX12xxDriverCommon::rx_status 
     return false;
   }
 
+  // A valid receiver reply permanently cancels AirPort/RocketLRS auto Wi-Fi for this boot.
+  if (firmwareOptions.is_airport || firmwareOptions.is_rocketlrs)
+  {
+    webserverPreventAutoStart = true;
+  }
+
   LastTLMpacketRecv_Ms = millis();
   LqTQly.add();
 
@@ -269,19 +280,33 @@ static bool ICACHE_RAM_ATTR ProcessDownlinkPacket(SX12xxDriverCommon::rx_status 
       case PACKET_TYPE_LINKSTATS:
         LinkStatsFromOta(&ota8->data_dl.ul_link_stats.stats);
 
-        ProcessOtaDataDl(
-          ota8->data_dl.packageIndex, ota8Second->data_dl.packageIndex,
-          ota8->data_dl.ul_link_stats.payload,
-          ota8Second->data_dl.ul_link_stats.payload,
-          sizeof(ota8->data_dl.ul_link_stats.payload),
-          ota8->data_dl.stubbornAck
-        );
+        if (firmwareOptions.is_rocketlrs)
+        {
+          uint8_t payload[ELRS8_DATA_DL_BYTES_PER_CALL];
+          const uint8_t length = OtaUnpackRLRSDataDl(otaPktPtr, payload, sizeof(payload));
+          rlrsLink.unpackAir(payload, length);
+        }
+        else
+        {
+          ProcessOtaDataDl(
+            ota8->data_dl.packageIndex, ota8Second->data_dl.packageIndex,
+            ota8->data_dl.ul_link_stats.payload,
+            ota8Second->data_dl.ul_link_stats.payload,
+            sizeof(ota8->data_dl.ul_link_stats.payload),
+            ota8->data_dl.stubbornAck
+          );
+        }
         break;
 
       case PACKET_TYPE_DATA:
         if (firmwareOptions.is_airport)
         {
           OtaUnpackAirportData(otaPktPtr, &apOutputBuffer);
+        }else if (firmwareOptions.is_rocketlrs)
+        {
+          uint8_t payload[ELRS8_DATA_UL_BYTES_PER_CALL];
+          const uint8_t length = OtaUnpackRLRSData(otaPktPtr, payload, sizeof(payload));
+          rlrsLink.unpackAir(payload, length);
         }
         else
         {
@@ -304,19 +329,33 @@ static bool ICACHE_RAM_ATTR ProcessDownlinkPacket(SX12xxDriverCommon::rx_status 
       case PACKET_TYPE_LINKSTATS:
         LinkStatsFromOta(&otaPktPtr->std.data_dl.ul_link_stats.stats);
 
-        ProcessOtaDataDl(
-          otaPktPtr->std.data_dl.packageIndex, otaPktPtrSecond->std.data_dl.packageIndex,
-          otaPktPtr->std.data_dl.ul_link_stats.payload,
-          otaPktPtrSecond->std.data_dl.ul_link_stats.payload,
-          sizeof(otaPktPtr->std.data_dl.ul_link_stats.payload),
-          otaPktPtr->std.data_dl.stubbornAck
-        );
+        if (firmwareOptions.is_rocketlrs)
+        {
+          uint8_t payload[ELRS4_DATA_DL_BYTES_PER_CALL];
+          const uint8_t length = OtaUnpackRLRSDataDl(otaPktPtr, payload, sizeof(payload));
+          rlrsLink.unpackAir(payload, length);
+        }
+        else
+        {
+          ProcessOtaDataDl(
+            otaPktPtr->std.data_dl.packageIndex, otaPktPtrSecond->std.data_dl.packageIndex,
+            otaPktPtr->std.data_dl.ul_link_stats.payload,
+            otaPktPtrSecond->std.data_dl.ul_link_stats.payload,
+            sizeof(otaPktPtr->std.data_dl.ul_link_stats.payload),
+            otaPktPtr->std.data_dl.stubbornAck
+          );
+        }
         break;
 
       case PACKET_TYPE_DATA:
         if (firmwareOptions.is_airport)
         {
           OtaUnpackAirportData(otaPktPtr, &apOutputBuffer);
+        }else if (firmwareOptions.is_rocketlrs)
+        {
+          uint8_t payload[ELRS8_DATA_UL_BYTES_PER_CALL];
+          const uint8_t length = OtaUnpackRLRSData(otaPktPtr, payload, sizeof(payload));
+          rlrsLink.unpackAir(payload, length);
         }
         else
         {
@@ -565,6 +604,19 @@ void ICACHE_RAM_ATTR SendRCdataToRF()
     if (firmwareOptions.is_airport)
     {
       OtaPackAirportData(&otaPkt, &apInputBuffer);
+    }else if (firmwareOptions.is_rocketlrs)
+    {
+      uint8_t payload[ELRS8_DATA_UL_BYTES_PER_CALL];
+      const uint8_t length = rlrsLink.packAir(payload, OtaGetRLRSDataCapacity());
+      if (length == 0)
+      {
+        payload[0] = 0xFF; // idle marker, no RLRS frame in this packet
+        OtaPackRLRSData(&otaPkt, payload, 1);
+      }
+      else
+      {
+        OtaPackRLRSData(&otaPkt, payload, length);
+      }
     }
     else if ((NextPacketIsDataUl && DataUlSender.IsActive()) || dontSendChannelData)
     {
@@ -723,7 +775,11 @@ static void UARTdisconnected()
 
 static void UARTconnected()
 {
-  webserverPreventAutoStart = true;
+  // AirPort and RocketLRS start without a handset; wait for an actual receiver reply.
+  if (!firmwareOptions.is_airport && !firmwareOptions.is_rocketlrs)
+  {
+    webserverPreventAutoStart = true;
+  }
   rfModeLastChangedMS = millis(); // force syncspam on first packets
 
   auto index = adjustPacketRateForBaud(config.GetRate());
@@ -1066,6 +1122,27 @@ void ParseMSPData(uint8_t *buf, uint8_t size)
   }
 }
 
+static uint32_t rlrsLinkStatsLastSent = 0;
+
+static void CheckSendRlrsLinkStats(uint32_t now)
+{
+  if (!firmwareOptions.is_rocketlrs || now - rlrsLinkStatsLastSent < 1000)
+    return;
+
+  rlrsLinkStatsLastSent = now;
+
+  RlrsLink::LinkStats stats;
+  stats.uplinkRssi = linkStats.uplink_RSSI_1;
+  stats.uplinkSnr = linkStats.uplink_SNR;
+  stats.uplinkLq = linkStats.uplink_Link_quality;
+  stats.downlinkRssi = linkStats.downlink_RSSI_1;
+  stats.downlinkSnr = linkStats.downlink_SNR;
+  stats.downlinkLq = linkStats.downlink_Link_quality;
+  stats.txPower = linkStats.uplink_TX_Power;
+  stats.rfMode = ExpressLRS_currAirRate_Modparams->enum_rate;
+  rlrsLink.enqueueLinkStats(stats);
+}
+
 static void HandleUARTout()
 {
   if (firmwareOptions.is_airport)
@@ -1078,6 +1155,14 @@ static void HandleUARTout()
       apOutputBuffer.popBytes(buf, size);
       apOutputBuffer.unlock();
       TxUSB->write(buf, size);
+    }
+  }else if(firmwareOptions.is_rocketlrs)
+  {
+    uint8_t buf[64];
+    const uint16_t length = rlrsLink.takeUart(buf, sizeof(buf));
+    if (length != 0)
+    {
+      TxUSB->write(buf, length);
     }
   }
 }
@@ -1095,6 +1180,21 @@ static void HandleUARTin()
       apInputBuffer.lock();
       apInputBuffer.pushBytes(buf, size);
       apInputBuffer.unlock();
+    }
+    return;
+  }else if(firmwareOptions.is_rocketlrs)
+  {
+    const int available = TxUSB->available();
+    if (available > 0)
+    {
+      uint8_t buf[64];
+      const size_t size = TxUSB->readBytes(
+        buf, std::min(static_cast<size_t>(available), sizeof(buf)));
+      if (size != 0)
+      {
+        if (connectionState != connected) feedUSB(buf, static_cast<uint16_t>(size));
+        rlrsLink.feedUart(buf, static_cast<uint16_t>(size));
+      }
     }
     return;
   }
@@ -1201,6 +1301,10 @@ static void setupSerial()
   {
     serialPort = new HardwareSerial(1);
     ((HardwareSerial *)serialPort)->begin(firmwareOptions.uart_baud, SERIAL_8N1, U0RXD_GPIO_NUM, U0TXD_GPIO_NUM);
+  }else if(firmwareOptions.is_rocketlrs)
+  {
+    serialPort = new HardwareSerial(1);
+    ((HardwareSerial *)serialPort)->begin(firmwareOptions.uart_baud, SERIAL_8N1, U0RXD_GPIO_NUM, U0TXD_GPIO_NUM);
   }
   else if (GPIO_PIN_DEBUG_RX != UNDEF_PIN && GPIO_PIN_DEBUG_TX != UNDEF_PIN)
   {
@@ -1258,6 +1362,10 @@ static void setupSerial()
   if (firmwareOptions.is_airport)
   {
     Serial.begin(firmwareOptions.uart_baud);
+    TxUSB = &Serial;
+  }else if(firmwareOptions.is_rocketlrs)
+  {
+    Serial.begin(9600); // RocketLRS uses 9600 baud for the serial port
     TxUSB = &Serial;
   }
   else
@@ -1392,7 +1500,7 @@ void setup()
     Radio.RXdoneCallback = &RXdoneISR;
     Radio.TXdoneCallback = &TXdoneISR;
 
-    if (!firmwareOptions.is_airport)
+    if (!firmwareOptions.is_airport && !firmwareOptions.is_rocketlrs)
     {
       crsfTransmitter.begin();
       crsfRouter.addConnector(&otaConnector);
@@ -1400,7 +1508,7 @@ void setup()
       crsfRouter.addConnector(&usbConnector);
 
       // When a CRSF handset is detected, it will add itself to the router
-      handset->registerCallbacks(UARTconnected, firmwareOptions.is_airport ? nullptr : UARTdisconnected);
+      handset->registerCallbacks(UARTconnected, firmwareOptions.is_airport || firmwareOptions.is_rocketlrs ? nullptr : UARTdisconnected);
     }
 
     config.Load(); // Load the stored values from eeprom
@@ -1444,6 +1552,19 @@ void setup()
       POWERMGNT::init();
       DynamicPower_Init();
 
+      if (firmwareOptions.is_rocketlrs)
+      {
+        // RocketLRS needs the full-resolution OTA payload (10 bytes) and a
+        // balanced bi-dir link: 100 Hz gives 50 telemetry slots/s each way.
+        uint8_t rateIndex = config.GetRate();
+        if (enumRatetoIndex(RATE_LORA_2G4_100HZ_8CH, rateIndex))
+        {
+          config.SetRate(rateIndex);
+        }
+        config.SetTlm(TLM_RATIO_1_2);
+        config.SetMotionMode(0);
+      }
+
       // Set the pkt rate, TLM ratio, and power from the stored eeprom values
       ChangeRadioParams();
 
@@ -1465,7 +1586,7 @@ void setup()
 
   devicesStart();
 
-  if (firmwareOptions.is_airport)
+  if (firmwareOptions.is_airport || firmwareOptions.is_rocketlrs)
   {
     config.SetTlm(TLM_RATIO_1_2); // Force TLM ratio of 1:2 for balanced bi-dir link
     config.SetMotionMode(0); // Ensure motion detection is off
@@ -1478,6 +1599,7 @@ void loop()
   uint32_t now = millis();
 
   HandleUARTout(); // Only used for non-CRSF output
+  CheckSendRlrsLinkStats(now);
 
   #if defined(USE_BLE_JOYSTICK)
   if (connectionState != bleJoystick && connectionState != noCrossfire) // Wait until the correct crsf baud has been found
@@ -1512,7 +1634,7 @@ void loop()
   DynamicPower_Update(now);
   VtxPitmodeSwitchUpdate();
 
-  if (!firmwareOptions.is_airport)
+  if (!firmwareOptions.is_airport && !firmwareOptions.is_rocketlrs)
   {
     checkSendLinkStatsToHandset(now);
     if (DataDlReceiver.HasFinishedData())

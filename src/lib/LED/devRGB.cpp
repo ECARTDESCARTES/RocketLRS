@@ -258,6 +258,9 @@ constexpr uint8_t LEDSEQ_NO_CROSSFIRE[] = {  10, 100 }; // 1 blink, 1s pause (on
 constexpr uint8_t LEDSEQ_BINDING[] = { 10, 10, 10, 100 };   // 2x 100ms blink, 1s pause
 constexpr uint8_t LEDSEQ_MODEL_MISMATCH[] = { 10, 10, 10, 10, 10, 100 };   // 3x 100ms blink, 1s pause
 constexpr uint8_t LEDSEQ_UPDATE[] = { 20, 5, 5, 5, 5, 40 };   // 200ms on, 2x 50ms off/on, 400ms off
+#if defined(TARGET_TX)
+constexpr uint8_t LEDSEQ_CONNECTED_TX[] = { 20, 10, 50, 20 }; // 200ms on, 100ms off, 500ms on, 200ms off
+#endif
 
 #define NORMAL_UPDATE_INTERVAL 50
 
@@ -421,6 +424,19 @@ static int timeout()
             blinkyColor.h = 10;
             return flashLED(blinkyColor, 192, 0, LEDSEQ_MODEL_MISMATCH, sizeof(LEDSEQ_MODEL_MISMATCH));
         }
+#endif
+#if defined(TARGET_TX)
+        if (firmwareOptions.is_rocketlrs)
+        {
+            blinkyColor.h = 0;
+            blinkyColor.s = 255;
+            return flashLED(blinkyColor, 128, 0, LEDSEQ_CONNECTED_TX, sizeof(LEDSEQ_CONNECTED_TX));
+        }
+        blinkyColor.h = 85;
+        blinkyColor.s = 255;
+        blinkyColor.v = 128;
+        WS281BsetLED(HsvToRgb(blinkyColor));
+        return DURATION_NEVER;
 #endif
         // Set the color and we're done!
         blinkyColor.h = ExpressLRS_currAirRate_Modparams->index * 256 / RATE_MAX;

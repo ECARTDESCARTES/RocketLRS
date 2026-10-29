@@ -7,7 +7,9 @@
  */
 
 #include "OTA.h"
+#include <algorithm>
 #include <cassert>
+#include <cstring>
 
 static_assert(sizeof(OTA_Packet4_s) == OTA4_PACKET_SIZE, "OTA4 packet struct is invalid!");
 static_assert(sizeof(OTA_Packet8_s) == OTA8_PACKET_SIZE, "OTA8 packet struct is invalid!");
@@ -633,4 +635,94 @@ void OtaUnpackAirportData(OTA_Packet_s const * const otaPktPtr, FIFO<AP_MAX_BUF_
         uint8_t count = otaPktPtr->std.airport.count;
         outputBuffer->atomicPushBytes(otaPktPtr->std.airport.payload, count);
     }
+}
+
+uint8_t OtaGetRLRSDataCapacity()
+{
+    return OtaIsFullRes ? ELRS8_DATA_UL_BYTES_PER_CALL : ELRS4_DATA_UL_BYTES_PER_CALL;
+}
+
+static uint8_t *OtaRLRSPayload(OTA_Packet_s * const otaPktPtr)
+{
+    return OtaIsFullRes ? otaPktPtr->full.data_ul.payload : otaPktPtr->std.data_ul.payload;
+}
+
+static const uint8_t *OtaRLRSPayload(OTA_Packet_s const * const otaPktPtr)
+{
+    return OtaIsFullRes ? otaPktPtr->full.data_ul.payload : otaPktPtr->std.data_ul.payload;
+}
+
+void OtaPackRLRSData(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uint8_t length)
+{
+    const uint8_t capacity = OtaGetRLRSDataCapacity();
+
+    if (OtaIsFullRes)
+    {
+        otaPktPtr->full.data_ul.packetType = PACKET_TYPE_DATA;
+        otaPktPtr->full.data_ul.stubbornAck = 0;
+        otaPktPtr->full.data_ul.packageIndex = 0;
+    }
+    else
+    {
+        otaPktPtr->std.type = PACKET_TYPE_DATA;
+        otaPktPtr->std.data_ul.stubbornAck = 0;
+        otaPktPtr->std.data_ul.packageIndex = 0;
+    }
+
+    uint8_t *destination = OtaRLRSPayload(otaPktPtr);
+    const uint8_t copied = std::min(length, capacity);
+    if (copied != 0 && payload != nullptr)
+        std::memcpy(destination, payload, copied);
+    if (copied < capacity)
+        std::memset(destination + copied, 0, capacity - copied);
+}
+
+uint8_t OtaUnpackRLRSData(OTA_Packet_s const * const otaPktPtr, uint8_t *payload, uint8_t maxLength)
+{
+    const uint8_t capacity = OtaGetRLRSDataCapacity();
+    const uint8_t copied = std::min(capacity, maxLength);
+    if (copied != 0 && payload != nullptr)
+        std::memcpy(payload, OtaRLRSPayload(otaPktPtr), copied);
+    return copied;
+}
+
+uint8_t OtaGetRLRSDownlinkCapacity()
+{
+    return static_cast<uint8_t>(OtaIsFullRes
+        ? ELRS8_DATA_DL_BYTES_PER_CALL - sizeof(OTA_LinkStats_s)
+        : ELRS4_DATA_DL_BYTES_PER_CALL - sizeof(OTA_LinkStats_s));
+}
+
+static uint8_t *OtaRLRSDlPayload(OTA_Packet_s * const otaPktPtr)
+{
+    return OtaIsFullRes ? otaPktPtr->full.data_dl.ul_link_stats.payload
+                        : otaPktPtr->std.data_dl.ul_link_stats.payload;
+}
+
+static const uint8_t *OtaRLRSDlPayload(OTA_Packet_s const * const otaPktPtr)
+{
+    return OtaIsFullRes ? otaPktPtr->full.data_dl.ul_link_stats.payload
+                        : otaPktPtr->std.data_dl.ul_link_stats.payload;
+}
+
+uint8_t OtaPackRLRSDataDl(OTA_Packet_s * const otaPktPtr, const uint8_t *payload, uint8_t length)
+{
+    const uint8_t capacity = OtaGetRLRSDownlinkCapacity();
+    const uint8_t copied = std::min(length, capacity);
+    uint8_t *destination = OtaRLRSDlPayload(otaPktPtr);
+
+    if (copied != 0 && payload != nullptr)
+        std::memcpy(destination, payload, copied);
+    if (copied < capacity)
+        std::memset(destination + copied, 0, capacity - copied);
+    return copied;
+}
+
+uint8_t OtaUnpackRLRSDataDl(OTA_Packet_s const * const otaPktPtr, uint8_t *payload, uint8_t maxLength)
+{
+    const uint8_t capacity = OtaGetRLRSDownlinkCapacity();
+    const uint8_t copied = std::min(capacity, maxLength);
+    if (copied != 0 && payload != nullptr)
+        std::memcpy(payload, OtaRLRSDlPayload(otaPktPtr), copied);
+    return copied;
 }
